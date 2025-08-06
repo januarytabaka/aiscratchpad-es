@@ -16,8 +16,8 @@ website:
         menu:
         - text: EN
           href: https://aiscratchpad.com
-        - text: CAT
-          href: https://cat.aiscratchpad.com
+        - text: CA
+          href: https://ca.aiscratchpad.com
   comments:
     giscus:
       repo: januarytabaka/januarytabaka.github.io
