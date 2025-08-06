@@ -1,0 +1,47 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "AI Scratchpad (ES)"
+  navbar:
+    right:
+      - privacy.qmd
+      - about.qmd
+      - icon: github
+        href: https://github.com/januarytabaka
+      - icon: twitter
+        href: https://x.com/january_tabaka
+      - text: "Inglés"
+        href: https://aiscratchpad.com
+      - text: "Catalan"
+        href: https://cat.aiscratchpad.com
+  comments:
+    giscus:
+      repo: januarytabaka/januarytabaka.github.io
+      repo-id: "R_kgDOPTiMRA"
+      category: "General"
+      category-id: "DIC_kwDOPTiMRM4CtgfQ"
+      mapping: "pathname"
+      reactions-enabled: true
+      theme: "preferred_color_scheme"
+format:
+  html:
+    theme:
+      - cosmo
+      - brand
+    css: styles.css
+    include-in-header: _includes/matomo.html
+    security:
+      content-security-policy:
+        # Allows scripts from your own site and giscus
+        script-src:
+          - "'self'"
+          - "https://giscus.app"
+      referrer-policy: "no-referrer"
+
+engine: knitr
+knitr:
+  opts_chunk: 
+    engine.path:
+      python: /usr/bin/python3
