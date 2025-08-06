@@ -4,6 +4,9 @@ project:
 
 website:
   title: "AI Scratchpad (ES)"
+  site-url: https://es.aiscratchpad.com
+  description: "Un blog técnico con guías prácticas sobre Inteligencia Artificial y Machine Learning. Incluye código en Python y R para un enfoque práctico y aplicado a la ciencia de datos."
+
   navbar:
     right:
       - privacy.qmd
@@ -18,6 +21,8 @@ website:
           href: https://aiscratchpad.com
         - text: CA
           href: https://ca.aiscratchpad.com
+      - icon: rss
+        href: index.xml
   comments:
     giscus:
       repo: januarytabaka/januarytabaka.github.io
