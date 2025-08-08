@@ -81,7 +81,7 @@ feature_x = 'buy_price'
 feature_y = 'sq_mt_built'
 X_features = ["Precio (€)", "Superficie (m²)"]
 
-fig, ax = plt.subplots(1, 3, figsize=(15, 4.5))
+fig, ax = plt.subplots(1, 3, figsize=(8, 2.5))
 
 # Gráfico 1: Datos Originales
 ax[0].scatter(X_train[feature_x], X_train[feature_y])
@@ -107,8 +107,8 @@ ax[2].set_title(r"3. Tras Escalado ((X - $\mu$) / $\sigma$)")
 ax[2].axis('equal')
 ax[2].grid(True)
 
-fig.suptitle("El Efecto Paso a Paso de la Estandarización", fontsize=16)
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+fig.suptitle("El Efecto Paso a Paso de la Estandarización")
 plt.show()
 ```
 
@@ -175,7 +175,7 @@ feature_x = 'buy_price'
 feature_y = 'sq_mt_built'
 X_features = ["Precio (€)", "Superficie (m²)"]
 
-fig, ax = plt.subplots(1, 3, figsize=(15, 4.5))
+fig, ax = plt.subplots(1, 3, figsize=(8, 2.5))
 
 # Gráfico 1: Datos Originales
 ax[0].scatter(X_train[feature_x], X_train[feature_y])
@@ -201,8 +201,8 @@ ax[2].set_title(r"3. Tras Escalado ((X - $\mu$) / $\sigma$)")
 ax[2].axis('equal')
 ax[2].grid(True)
 
-fig.suptitle("El Efecto Paso a Paso de la Estandarización", fontsize=16)
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+fig.suptitle("El Efecto Paso a Paso de la Estandarización")
 plt.show()
 ```
 
