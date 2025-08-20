@@ -1,0 +1,903 @@
+---
+title: "Escalado de Características Parte 2: Estandarización, Normalización y Escalado Robusto — en Python y R"
+author: "January Tabaka"
+date: "2025-08-20"
+description: "Una guía práctica de las tres técnicas de escalado de características más comunes en aprendizaje automático: estandarización, normalización y escalado robusto. Incluye ejemplos de código en Python y R, y un análisis de su sensibilidad a valores atípicos."
+categories: 
+  - Fundamentos
+  - Preprocesamiento de Datos
+  - Escalado
+  - Estandarización
+  - Normalización
+  - Escalado Robusto
+  - "Serie: Escalado de Características"
+image: "/images/standardization.png"
+lang: es
+toc: true
+toc-depth: 3
+code-copy: true
+draft: false
+---
+
+En el [post anterior](/posts/escalado-caracteristicas-parte-1/index.qmd) vimos por qué el escalado de datos es un paso crítico en aprendizaje automático (*machine learning*). Ahora, pasemos al cómo. En esta guía exploraremos las tres técnicas de escalado más comunes y su implementación tanto en Python como en R.
+
+:::{.callout-important collapse="true"}
+### Una nota rápida sobre la terminología: Estandarización vs. Normalización
+
+El mundo de la estadística tiene muchas formas de normalización. Sin embargo, al preparar datos específicamente para modelos de aprendizaje automático, la comunidad generalmente utiliza los siguientes términos, que son los adoptados en este post:
+
+- **Estandarización** se refiere al **escalado Z-score**: transformar los datos para que tengan una **media de 0 y una desviación estándar de 1**.
+
+- **Normalización** suele referirse al **escalado Min-Max**: transformar los datos para que se ajusten a un rango específico, normalmente **[0, 1]**.
+
+Aunque existen otros métodos de escalado (algunos de los cuales se cubrirán en el post sobre transformadores avanzados), estos dos, junto con el Escalado Robusto, son las técnicas fundamentales utilizadas con mayor frecuencia.
+:::
+
+Primero, vamos a crear un conjunto de datos sencillo para ilustrar los conceptos.
+
+::: {.panel-tabset}
+
+### Python
+
+```{python}
+#| label: python-setup-data
+
+import numpy as np
+
+# Un conjunto de datos sencillo con una característica
+data = np.array([[10.0], [20.0], [30.0], [40.0], [50.0]])
+
+print("Data: ", data.T)
+```
+
+### R
+
+```{r}
+#| label: r-setup-data
+library(tibble)
+
+# Un conjunto de datos sencillo con una característica
+data <- tibble(feature = c(10, 20, 30, 40, 50))
+
+cat("Data: [", paste(data$feature, collapse = " "), "]")
+```
+
+## Estandarización (normalización Z-score)
+
+**Principio**: La estandarización reescala los datos para que tengan una media de 0 y una desviación estándar de 1. A esto se le suele llamar normalización Z-score.
+
+**Fórmula**:
+$$ Z = \frac{X - \mu}{\sigma} $$
+**Donde**:
+
+- $X$ - es el vector de valores originales (la transformación se aplica elemento por elemento)  
+- $\mu$ - es su media  
+- $\sigma$ - es su desviación estándar  
+
+**Cuándo usarla**: Este es el escalador más común y utilizado por defecto. Es especialmente efectivo si tus datos siguen una distribución Gaussiana (normal).
+
+Aquí tienes cómo implementarlo usando las librerías estándar en Python y R.
+
+::: {.panel-tabset}
+
+### Python: `StandardScaler`
+
+```{python}
+#| label: py-z-scaler
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+
+# Inicializar y ajustar/transformar los datos
+std_scaler = StandardScaler()
+standardized_data = std_scaler.fit_transform(data)
+
+print("Media aprendida:", std_scaler.mean_,
+      "\nDesviación estándar aprendida:", std_scaler.scale_,
+      "\nDatos estandarizados:", np.round(standardized_data.T, 3))
+```
+
+### R: `step_normalize()`
+
+```{r}
+#| label: r-step_normalize
+#| message: false
+library(tidymodels)
+library(dplyr)
+
+# Definir la receta.
+standarization_recipe <- recipe(~ feature, data = data) %>% step_normalize(feature)
+
+# Preparar la receta
+# Este paso aprende la media y la desviación estándar a partir de los datos.
+prepared_standarization_recipe <- prep(standarization_recipe, training = data)
+
+# Aplicar la receta
+# Este paso aplica la transformación aprendida.
+standardized_data <- bake(prepared_standarization_recipe, new_data = data)
+
+# Obtener los parámetros aprendidos
+mean_sd <- tidy(prepared_standarization_recipe, number = 1)
+
+# Extraer los valores específicos del tibble ordenado
+mean_val <- mean_sd %>% filter(statistic == "mean") %>% pull(value)
+sd_val   <- mean_sd %>% filter(statistic == "sd") %>% pull(value)
+
+cat("\nMedia aprendida: ", mean_val,
+    '\nDesviación estándar aprendida: ', sd_val,
+    "\nDatos estandarizados: [",
+    paste(round(standardized_data$feature, 3), collapse = " "),"]")
+
+```
+
+:::
+
+Si comparas los resultados de Python y R, notarás que son ligeramente diferentes. Esto no es un error, sino una distinción estadística clave:
+
+- **`scikit-learn` en Python utiliza la desviación estándar poblacional** (dividiendo entre `n`), tratando tu conjunto de datos como un universo completo.
+- **`tidymodels` en R utiliza la desviación estándar muestral** (dividiendo entre `n-1`), lo cual es la práctica estándar en estadística para estimar los parámetros de una población más grande.
+
+:::{.callout-tip #std-scaler-manual collapse="true"}
+### Bajo el capó: el cálculo manual
+#### Implementación con bucle
+
+Aquí tienes cómo realizar la estandarización manualmente.
+
+Los nombres de variables **mu** ($\mu$) para la **media** y **sigma** ($\sigma$) para la desviación estándar se utilizan para coincidir directamente con la fórmula.
+
+::: {.panel-tabset}
+
+### Python
+
+```{python}
+#| label: py-statistics
+#| echo: true
+# Primero, calcular las dos estadísticas clave para el conjunto de datos
+# mu (μ) es la media
+mu = np.mean(data)
+
+# sigma (σ) es la desviación estándar
+sigma = np.std(data)
+
+print("Media (μ): ", mu, "\nDesviación estándar (σ):", sigma)
+```
+
+### R
+
+```{r}
+#| label: r-statistics
+
+# Primero, calcular las dos estadísticas clave para el conjunto de datos
+# mu (μ) es la media
+mu <- mean(data$feature)
+
+# sigma (σ) es la desviación estándar
+sigma <- sd(data$feature)
+
+cat("Media (μ): ", mu, "\nDesviación estándar (σ): ", sigma)
+```
+
+:::
+
+##### Un breve desvío estadístico: ¿Por qué las desviaciones estándar son diferentes?
+
+Una comparación de las salidas de Python y R resalta un detalle estadístico importante. Mientras que la media calculada es idéntica (30.0), las desviaciones estándar no lo son.
+
+- Salida de `np.std()` en Python: **14.1421**  
+- Salida de `sd()` en R: **15.8114**
+
+Esto no es un error; es una distinción estadística crucial entre dos formas diferentes de calcular la desviación estándar.
+
+**Desviación estándar poblacional (la opción por defecto en NumPy)**
+
+Por defecto, `np.std()` en NumPy calcula la **desviación estándar poblacional**. Este método es apropiado cuando un conjunto de datos representa a toda la población. La fórmula divide la suma de las diferencias al cuadrado entre `n`, el número total de observaciones.
+
+**Desviación estándar muestral (la opción por defecto en R)**
+
+Por defecto, la función `sd()` en R calcula la **desviación estándar muestral**. Este método es apropiado cuando un conjunto de datos se considera una muestra de una población más grande. Al usar `n-1` en el denominador, la fórmula ofrece una estimación más precisa y no sesgada de la desviación estándar de la población.
+
+##### Haciendo que Python coincida con R
+
+Python puede igualar fácilmente el resultado de R indicando a NumPy que use `n-1`. Esto se logra configurando el parámetro `ddof=1` ("Delta Degrees of Freedom").
+
+```{python}
+#| label: py-std
+# Establecer ddof=1 para indicar a NumPy que use n-1 en el denominador,
+# con el fin de calcular la desviación estándar muestral
+sigma = np.std(data, ddof=1)
+
+print("Desviación estándar muestral (σ): ", sigma)
+```
+
+La implementación con un bucle for imita cómo se podría realizar el cálculo a mano, procesando un número a la vez.
+
+Este método es explícito y **fácil de seguir**, pero puede ser **muy lento** para conjuntos de datos grandes porque Python debe interpretar cada paso del bucle individualmente.
+
+::: {.panel-tabset}
+
+### Python
+
+El siguiente código estandariza los datos paso a paso:
+
+1. **Inicialización**: Una lista vacía, `standardized_data`, almacenará los nuevos valores escalados calculados.  
+2. **Iteración**: Recorre cada elemento ($x$) en el arreglo de datos original.  
+3. **Transformación**: Dentro del bucle, se aplica la fórmula del Z-score restando la media ($\mu$) al valor y dividiendo el resultado entre la desviación estándar ($\sigma$).  
+4. **Acumulación**: El resultado de este cálculo, `standardized_value`, se agrega a la lista `standardized_data`.  
+5. **Finalización**: El código concluye convirtiendo la lista de Python nuevamente en un arreglo de NumPy.
+
+```{python}
+#| label: py-forloop
+import numpy as np
+
+# Usar la media previamente calculada (mu) y restablecer sigma 
+# para que coincida con scikit-learn (desviación estándar poblacional)
+sigma = np.std(data)
+
+# 1. Crear una lista vacía para almacenar los resultados
+standardized_data = []
+
+# 2. Recorrer cada valor en los datos originales
+for x in data:
+    # 3. Aplicar la fórmula de estandarización a cada valor
+    # Fórmula: z = (valor - mu) / sigma
+    standardized_value = (x - mu) / sigma
+
+    # 4. Agregar el resultado a la lista
+    standardized_data.append(standardized_value)
+
+# 5. Convertir la lista de resultados nuevamente en un arreglo de NumPy
+standardized_data = np.array(standardized_data)
+
+print("Datos estandarizados:\n", np.round(standardized_data.T, 3))
+```
+
+### R
+
+El siguiente código estandariza los datos paso a paso:
+
+1.  **Inicialización (Preasignación):** Se crea un vector numérico, `standardized_data`, de un tamaño predefinido usando `numeric()`. Esta es una optimización de rendimiento común en R.  
+2.  **Iteración (Por índice):** Un bucle `for` itera sobre los **índices** del vector (del 1 al 5), generados por la función `seq_along()`.  
+3.  **Acceso a los datos y transformación:** Dentro del bucle, el índice actual (`i`) se usa para acceder al valor correspondiente en los datos originales: `data$feature[i]`. Para cada valor individual, se aplica la fórmula del Z-score restando la media ($\mu$) y dividiendo entre la desviación estándar ($\sigma$).  
+4.  **Asignación:** El resultado, `standardized_value`, se asigna directamente en la posición `i` del vector preasignado `standardized_data`.  
+
+```{r}
+#| label: r-forloop
+
+# Usar la media (mu) y sigma previamente calculados
+
+# 1. Preasignar un vector vacío del tamaño correcto
+standardized_data <- numeric(length(data$feature))
+
+# 2. Recorrer cada valor usando su índice
+for (i in seq_along(data$feature)) {
+  # 3. Aplicar la fórmula de estandarización a cada valor
+  # Fórmula: z = (valor - mu) / sigma
+  standardized_value <- (data$feature[i] - mu) / sigma
+  
+  # 4. Asignar el resultado a la posición correspondiente en el vector
+  standardized_data[i] <- standardized_value
+}
+
+cat("Datos estandarizados: [", paste(round(standardized_data, 3), collapse = " "), "]")
+```
+
+:::
+
+#### La implementación (Vectorizada)
+
+::: {.panel-tabset}
+
+### Python
+
+```{python}
+#| label: py-vectorized
+import numpy as np
+
+# El enfoque vectorizado aplica la operación a todo el arreglo a la vez
+# Aplicar la fórmula: (array - mu) / sigma
+standardized_data = (data - mu) / sigma
+
+print("Datos estandarizados:", np.round(standardized_data.T, 3))
+```
+
+### R
+
+```{r}
+#| label: r-vectorized
+
+# La forma vectorizada en R
+(data$feature - mu) / sigma
+```
+
+### El atajo en Base R: `scale()``
+
+Para esta tarea específica (estandarización Z-score), Base R ofrece una función dedicada y práctica llamada `scale()`. Esta realiza tanto el centrado como el escalado en un solo paso y devuelve el resultado como una matriz.
+
+```{r}
+#| label: r-base-scale
+# La función scale() se encarga de todo por ti
+scale(data$feature)
+```
+
+:::
+
+**La magia detrás de la vectorización: Broadcasting y Reciclaje**
+
+¿Cómo operan estos lenguajes sobre arreglos completos sin un bucle? La magia está en una característica con dos nombres diferentes para la misma idea central: **broadcasting** en NumPy y **reciclaje de vectores** en R.
+
+Cuando se usa una expresión como `data - mu`, el lenguaje interpreta que la intención es restar un solo número (un escalar) de una colección de números (un arreglo o vector). En lugar de producir un error, "estira" o "recicla" el número único para que coincida con la longitud de la colección, y luego realiza la operación elemento por elemento.
+
+  * En efecto, calcula:
+
+          [10.0,  20.0, 30.0, 40.0, 50.0]
+        - [30.0,  30.0, 30.0, 30.0, 30.0]  <- El mu difundido (broadcasted)
+        ----------------------------------
+         [-20.0, -10.0,  0.0, 10.0, 20.0]
+
+**Operaciones elemento por elemento:** El resultado de la resta es un nuevo arreglo o vector. El lenguaje toma entonces este resultado y realiza la siguiente operación (división por $\sigma$) en cada elemento.
+
+Este enfoque vectorizado es superior en la práctica por dos razones principales:
+
+- **Rendimiento:** Tanto R como NumPy ejecutan estas operaciones vectorizadas no en sus respectivos intérpretes de alto nivel, sino en código C o Fortran altamente optimizado y precompilado. Esto las hace órdenes de magnitud más rápidas que un bucle `for`, especialmente a medida que aumenta la cantidad de datos.  
+- **Legibilidad:** El código se vuelve más conciso y se parece casi de forma idéntica a la fórmula matemática $( \frac{x - \mu}{\sigma})$, lo que facilita a científicos de datos y matemáticos leerlo y verificarlo. Compáralo con la fórmula:```
+
+    - **Python**: `(data - mu) / sigma`
+    - **R**: `(data$feature - mu) / sigma`
+
+Por estas razones, el enfoque vectorizado es el método preferido para operaciones matemáticas en lugar de los bucles manuales.
+
+:::
+
+:::{.callout-note collapse="true"}
+
+### Casos de uso avanzados
+
+Aunque `StandardScaler` casi siempre se utiliza con su configuración por defecto, existen escenarios específicos, como trabajar con datos dispersos en análisis de texto, donde se necesita mayor control. Estos casos especiales, incluidos los parámetros **`with_mean`** y **`with_std`**, se cubrirán en el último post de la serie.
+:::
+
+## Normalización (Escalado Min-Max)
+
+**Principio**: La normalización reescala todos los valores de los datos a un rango fijo, normalmente entre 0 y 1.
+
+**Fórmula:**
+$$X_{norm} = \frac{X - x_{min}}{x_{max} - x_{min}}$$
+
+**Donde**:
+
+- $x_{min}$ y $x_{max}$ son los valores mínimo y máximo de la característica, respectivamente.
+
+**Cuándo usarla**: Es útil cuando un algoritmo requiere datos en un intervalo acotado. También se utiliza ampliamente en el procesamiento de imágenes, donde los valores de los píxeles se normalizan a un rango. Sin embargo, es muy sensible a valores atípicos: un solo valor extremo puede comprimir todos los demás puntos de datos en un subrango muy pequeño.
+
+::: {.panel-tabset}
+
+### Python: `MinMaxScaler`
+
+```{python}
+#| label: py-min_max_scaler
+
+from sklearn.preprocessing import MinMaxScaler
+
+# Inicializar y ajustar/transformar los datos
+min_max_scaler = MinMaxScaler()
+normalized_data = min_max_scaler.fit_transform(data)
+
+print("Mínimo aprendido: ", min_max_scaler.data_min_,
+      "\nMáximo aprendido: ", min_max_scaler.data_max_,
+      "\nDatos normalizados: ", normalized_data.T)
+```
+
+### R: `step_range()`
+
+En el framework `tidymodels` de R, el equivalente del escalado Min-Max es `step_range()`. Este paso transforma los datos a un rango específico, que por defecto es `[0, 1]`.
+
+```{r}
+#| label: r-step_range
+#| message: false
+library(tidymodels)
+
+# Definir la receta
+#  - Añadir la función step_range().
+#  - El rango por defecto es min = 0 y max = 1.
+normalization_recipe <- recipe(~ feature, data = data) %>%
+  step_range(feature)
+
+# "Preparar" la receta
+# Este paso aprende el mínimo y el máximo a partir de los datos.
+prepared_normalization_recipe <- prep(normalization_recipe, training = data)
+
+# "Aplicar" la receta
+# Este paso aplica la transformación aprendida.
+normalized_data <- bake(prepared_normalization_recipe, new_data = data)
+
+# Obtener los parámetros aprendidos
+min_max <- tidy(prepared_normalization_recipe, number = 1)
+
+cat(paste("Mínimo aprendido: ", min_max$min, '\nMáximo aprendido: ', min_max$max),
+    "\nDatos normalizados: [",
+    paste(round(normalized_data$feature, 2), collapse = " "),"]")
+```
+
+- **`step_range()`**: Esta es la función principal. Funciona igual que `step_normalize`, pero en lugar de estandarizar, reescala los datos a un nuevo rango.  
+- **Rango por defecto:** Por defecto, `step_range()` escala a un rango de `[0, 1]`, exactamente como el `MinMaxScaler` de `scikit-learn`, por lo que no es necesario especificar argumentos adicionales para este caso común.
+
+:::
+
+:::{.callout-tip #minmax-scaler-manual collapse="true"}
+
+### Bajo el capó: el cálculo manual
+#### La implementación (Vectorizada)
+
+::: {.panel-tabset}
+
+### Python
+
+```{python}
+#| label: py-norm-vectorized
+
+# Encontrar el valor mínimo
+min_val = np.min(data)
+
+# Encontrar el valor máximo
+max_val = np.max(data)
+
+# Aplicar la fórmula: (x - min) / (max - min)
+normalized_data = (data - min_val) / (max_val - min_val)
+
+print("Mínimo: ", min_val, "\nMáximo: ", max_val,
+      "\nDatos normalizados: ", normalized_data.T)
+```
+
+### R
+
+```{r}
+#| label: r-norm-vectorized
+
+# Encontrar el valor mínimo
+min_val <- min(data$feature)
+
+# Encontrar el valor máximo
+max_val <- max(data$feature)
+
+# Aplicar la fórmula: (x - min) / (max - min)
+normalized_data <- (data$feature - min_val) / (max_val - min_val)
+
+cat("Mínimo: ", min_val, "\nMáximo: ", max_val,
+    "\nDatos normalizados: [", paste(normalized_data, collapse = " "), "]")
+```
+
+- **Nombres de funciones:** Las funciones de base R son simplemente `min()` y `max()`, lo que hace que el código sea increíblemente legible.
+
+:::
+
+:::
+
+:::{.callout-note collapse="true"}
+
+### Elegir una estrategia de escalado: Estandarización vs. Normalización
+
+La elección entre estandarización (escalado Z-score) y normalización (escalado Min-Max) es una decisión crítica en muchos flujos de preprocesamiento de datos. Aunque ambas son comunes, se basan en principios distintos y están mejor adaptadas a diferentes tareas.
+
+-   **Estandarización** suele ser la técnica recomendada por defecto. Su enfoque estadístico, que transforma los datos para que tengan una media de 0 y una desviación estándar de 1, resulta beneficioso para muchos algoritmos clásicos de aprendizaje automático, como la Regresión Lineal o las Máquinas de Vectores de Soporte, que funcionan mejor cuando las características están centradas alrededor de cero. Este método es particularmente eficaz si los datos de las características siguen aproximadamente una distribución Gaussiana (en forma de campana).
+
+-   **Normalización**, por otro lado, es la opción preferida cuando se requiere estrictamente un rango de salida acotado. Esto es esencial en aplicaciones específicas como el **Procesamiento de Imágenes**, donde los valores de los píxeles se escalan a un rango, y en las **Redes Neuronales**. En redes neuronales, funciones de activación como la sigmoide o la tanh pueden comportarse mal con valores de entrada grandes, por lo que comprimir las características en un rango consistente (por ejemplo, [0, 1] o [-1, 1]) ayuda a garantizar un entrenamiento estable y eficaz. Sin embargo, debe usarse con precaución, ya que su alta sensibilidad a valores atípicos puede comprimir la mayoría de los puntos de datos en un subrango muy pequeño.
+
+En resumen, la **estandarización** funciona como una opción robusta por defecto adecuada para la mayoría de modelos de aprendizaje automático. El uso de la **normalización** para escalar características a un rango estricto y acotado debe ser una elección deliberada, generalmente reservada para casos en los que la arquitectura de un algoritmo lo requiera (como en redes neuronales) o cuando un rango directamente interpretable sea esencial.
+:::
+
+## Escalado Robusto
+
+**Principio**: El Escalado Robusto ajusta los datos de acuerdo con el **Rango Intercuartílico** (**IQR**). Resta la mediana y escala los datos usando la diferencia entre el primer cuartil (percentil 25) y el tercer cuartil (percentil 75).
+
+**Fórmula**:
+$$X_{scaled} = \frac{X - q_2}{q_3 - q_1}$$
+
+**Donde**:
+
+- $q_1$, $q_2$ y $q_3$ son el primer, segundo (mediana) y tercer cuartil, respectivamente.
+
+**Cuándo usarlo**: Este método es, como su nombre lo indica, "robusto" frente a valores atípicos. Si tu conjunto de datos tiene valores extremos significativos, la estandarización puede verse sesgada. El Escalado Robusto utiliza la mediana y el IQR, que se ven mucho menos afectados por valores extremos, lo que lo convierte en una mejor opción en estas situaciones.
+
+::: {.panel-tabset}
+
+### Python: `RobustScaler`
+
+```{python}
+#| label: py-robust-scaler
+from sklearn.preprocessing import RobustScaler
+
+# Inicializar y ajustar/transformar los datos
+robust_scaler = RobustScaler()
+scaled_data = robust_scaler.fit_transform(data)
+
+print("Mediana aprendida: ", robust_scaler.center_,
+      "\nIQR aprendido: ", robust_scaler.scale_,
+      "\nDatos escalados: ", scaled_data.T)
+```
+
+### R: Escalado Robusto Personalizado
+
+Este es un gran ejemplo de las diferentes filosofías entre Python y R. Mientras que `scikit-learn` ofrece un `RobustScaler` dedicado, el ecosistema de `tidymodels` no tiene una única función equivalente.
+
+En su lugar, el enfoque idiomático en R es aprovechar la flexibilidad del framework `recipes` para crear una transformación de escalado robusto. Esto se puede hacer usando la función `step_mutate()` para aplicar la fórmula manualmente. Esto demuestra el poder y la extensibilidad del flujo de trabajo con `recipes`.
+
+```{r}
+#| label: r-robust_range
+#| message: false
+library(tidymodels)
+
+# Definir la receta con una mutación personalizada
+recipe_robust <- recipe(~ feature, data = data) %>%
+  step_mutate(feature = (feature - median(feature)) / IQR(feature))
+
+# "Preparar" la receta
+prepared_recipe_robust <- prep(recipe_robust, training = data)
+
+# "Aplicar" la receta
+# Este paso aplica la fórmula.
+scaled_data <- bake(prepared_recipe_robust, new_data = data)
+
+cat('Mediana: ', median(data$feature), "\nIQR: ", IQR(data$feature),
+    "\nDatos escalados: [", paste(scaled_data$feature, collapse = " "), "]")
+```
+
+- **`step_mutate(feature = ...)`**: Este es el núcleo de la solución. `step_mutate()` es una función del paquete `recipes` que permite crear o sobrescribir una columna usando un cálculo personalizado.  
+- **`(feature - median(feature)) / IQR(feature)`**: Esta es la fórmula manual para el escalado robusto. Le indica a la receta: "Para la columna `feature`, reemplaza sus valores actuales con el resultado de este cálculo."  
+  - `median(feature)`: Calcula la mediana de la columna `feature`.  
+  - `IQR(feature)`: Calcula el Rango Intercuartílico (IQR) de la columna `feature`.  
+
+**El flujo de trabajo sigue siendo el mismo:** Aunque se utilizó una fórmula personalizada, el poderoso flujo "definir, preparar, aplicar" permanece idéntico. Esta es la belleza del framework `recipes`: proporciona una estructura consistente tanto para transformaciones integradas como para personalizadas.
+
+:::
+
+:::{.callout-tip #robust-scaler-manual collapse="true"}
+
+### Bajo el capó: el cálculo manual
+#### La implementación (Vectorizada)
+
+::: {.panel-tabset}
+
+### Python
+
+```{python}
+#| label: py-robust-vectorized
+from scipy.stats import iqr
+import numpy as np
+
+# Calcular la mediana
+median_val = np.median(data)
+
+# Calcular el Rango Intercuartílico (IQR)
+iqr_val = iqr(data)
+
+# Aplicar la fórmula: (x - mediana) / IQR
+scaled_data = (data - median_val) / iqr_val
+
+print("Mediana: ", median_val,
+      "\nIQR: ", iqr_val,
+      "\nDatos escalados: ", scaled_data.T)
+```
+
+### R
+
+```{r}
+#| label: r-robust-vectorized
+# Calcular la mediana
+median_val <- median(data$feature)
+
+# Calcular el Rango Intercuartílico (IQR)
+iqr_val <- IQR(data$feature)
+
+# Aplicar la fórmula: (x - mediana) / IQR
+scaled_data <- (data$feature - median_val) / iqr_val
+
+cat("Mediana: ", median_val, "\nIQR: ", iqr_val,
+    "\nDatos escalados: [", paste(scaled_data, collapse = " "), "]")
+```
+
+- **La función `IQR()`:** R tiene una función integrada y dedicada `IQR()` que calcula directamente el Rango Intercuartílico, lo que hace que el código sea más conciso y legible.  
+- **Nombres de variables:** Los nombres de variables `median_val` e `iqr_val` se usan para evitar conflictos con las funciones integradas de R `median()` e `IQR()`. Esta es una práctica estándar en R para prevenir conflictos de nombres.  
+:::
+:::
+
+## Comparaciones visuales
+
+Para que estos conceptos sean más claros, he graficado la transformación de la misma característica bajo cada técnica. No estamos comparando entre diferentes características; el objetivo aquí es aislar el efecto de cada método de escalado en una sola variable.
+
+```{python}
+#| label: py-matplotlib
+#| echo: false
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+
+# Datos originales
+data = np.array([[10.0], [20.0], [30.0], [40.0], [50.0]])
+
+# Versiones escaladas
+scaled_standard = StandardScaler().fit_transform(data)
+scaled_minmax = MinMaxScaler().fit_transform(data)
+scaled_robust = RobustScaler().fit_transform(data)
+
+# Crear cuadrícula 2×2
+fig, axes = plt.subplots(2, 2, figsize=(8, 6))
+axes = axes.flatten()
+
+# Configuración de los gráficos
+plots_data = [
+    ("Original", data, "blue"),
+    ("Estandarización", scaled_standard, "orange"),
+    ("Normalización", scaled_minmax, "green"),
+    ("Escalado Robusto", scaled_robust, "red")
+]
+
+for ax, (title, values, color) in zip(axes, plots_data):
+    _ = ax.plot(range(1, len(values) + 1), values.flatten(), marker='o', color=color)
+    _ = ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
+    _ = ax.set_title(title)
+    _ = ax.set_xticks([])
+    _ = ax.set_xticklabels([])
+    ax.grid(False)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Cómo leer esta figura
+
+- **Una característica, mismo conjunto de muestras.** Los cuatro paneles muestran la *misma* característica medida en las mismas cinco muestras.  
+  Las etiquetas del eje X están ocultas a propósito: la posición simplemente refleja el orden de las muestras.  
+- **¿Por qué paneles separados?** La transformación de cada escalador se muestra en su propio panel para que su efecto pueda verse claramente sin interferencias de otras escalas:  
+  - **Original:** valores crudos, sin escalar.  
+  - **Estandarización:** centrado en 0 con varianza unitaria.  
+  - **Normalización:** estirado para ajustarse dentro de **[0, 1]**.  
+  - **Escalado Robusto:** centrado en la mediana y escalado por **IQR = Q3 − Q1**.  
+- **Escalas Y independientes.** Cada subgráfico tiene su propia escala vertical para que los patrones más pequeños (como el rango Min-Max) no queden visualmente aplanados por los rangos mayores de otros escaladores.  
+  La línea discontinua en **y = 0** es una referencia visual para el centrado.  
+
+## Resumen
+
+| Técnica | Principio | Implementaciones clave | Caso de uso principal | Sensibilidad a valores atípicos (*outliers*) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Estandarización** (Z-score) | Ajusta media=0, desviación estándar=1. | `sklearn.preprocessing.StandardScaler`<br>`recipes::step_normalize`<br>`base::scale` | Propósito general, opción por defecto. Mejor para datos con distribución Gaussiana. | Moderada |
+| **Normalización** (Escalado Min-Max) | Escala a un rango fijo, ej. [0, 1]. | `sklearn.preprocessing.MinMaxScaler`<br>`recipes::step_range` | **Redes Neuronales**, **Procesamiento de Imágenes** (cuando se requiere un rango estricto de salida). | Alta |
+| **Escalado Robusto** | Escala usando la Mediana y el IQR. | `sklearn.preprocessing.RobustScaler`<br>`recipes::step_mutate` | Datos con **valores atípicos** significativos. | Baja |
+
+## Sensibilidad de las técnicas de escalado a valores atípicos
+
+Ahora viene la parte más importante. En esta sección, mostraremos cómo reaccionan las tres técnicas de escalado cuando aparece un valor extremo. Aquí es donde realmente verás la diferencia práctica entre ellas y entenderás la lógica para elegir una u otra.
+
+Primero, vamos a crear dos conjuntos de datos simples: los datos originales limpios y una versión con un valor atípico significativo.
+
+::: {.panel-tabset}
+### Python
+
+```{python}
+#| label: py-datasets
+import numpy as np
+
+# Los datos originales
+original_data = np.array([[10.0], [20.0], [30.0], [40.0], [50.0]])
+
+# Los mismos datos pero con un valor atípico extremo 500
+outlier_data = np.array([[10.0], [20.0], [30.0], [40.0], [500.0] ])
+
+print("Datos originales: ", original_data.T,
+      "\nDatos con valor atípico: ", outlier_data.T)
+```
+
+### R
+```{r}
+#| label: r-datasets
+library(tibble)
+
+# Los datos originales limpios
+original_data <- tibble(feature = c(10, 20, 30, 40, 50))
+
+# Los mismos datos pero con un valor atípico extremo
+outlier_data <- tibble(feature = c(10, 20, 30, 40, 500))
+
+cat("Datos originales: [",
+    paste(original_data, collapse = " "),
+    "]\nDatos con valor atípico: [",
+    paste(outlier_data, collapse = " "), "]")
+```
+
+:::
+
+### Sensibilidad de la Estandarización
+
+La estandarización utiliza la media ($\mu$) y la desviación estándar ($\sigma$) para sus cálculos. Dado que ambas estadísticas son fácilmente influenciadas por valores extremos, esta técnica es moderadamente sensible a los valores atípicos.
+
+::: {.panel-tabset}
+### Python
+```{python}
+#| label: py-standard-outlier
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+
+# Escalar los datos originales
+std_scaler = StandardScaler()
+standardized_original_data = std_scaler.fit_transform(original_data)
+
+# Escalar los datos con valor atípico
+std_scaler_outlier = StandardScaler()
+standardized_outlier_data = std_scaler_outlier.fit_transform(outlier_data)
+
+print("Media aprendida (datos originales): ", std_scaler.mean_,
+      "\nDesviación estándar aprendida (datos originales): ", std_scaler.scale_,
+      "\nDatos originales estandarizados: ", np.round(standardized_original_data.T, 3),
+      "\nMedia aprendida (datos con valor atípico): ", std_scaler_outlier.mean_,
+      "\nDesviación estándar aprendida (datos con valor atípico): ", std_scaler_outlier.scale_,
+      "\nDatos con valor atípico estandarizados: ", np.round(standardized_outlier_data.T, 3)
+)
+```
+
+### R
+```{r}
+#| label: r-standard-outlier
+library(tidymodels)
+library(dplyr)
+
+# Receta, preparación y aplicación para los datos originales 
+recipe_orig_std <- recipe(~ feature, data = original_data) %>%
+  step_normalize(feature)
+prep_recipe_orig_std <- prep(recipe_orig_std, training = original_data)
+standardized_orig_data <- bake(prep_recipe_orig_std, new_data = original_data)
+
+# Obtener los parámetros aprendidos
+mean_sd_orig <- tidy(prep_recipe_orig_std, number = 1)
+
+# Extraer los valores específicos del tibble
+mean_orig <- mean_sd_orig %>% filter(statistic == "mean") %>% pull(value)
+sd_orig   <- mean_sd_orig %>% filter(statistic == "sd") %>% pull(value)
+
+# Receta, preparación y aplicación para los datos con valor atípico 
+recipe_outlier_std <- recipe(~ feature, data = outlier_data) %>%
+  step_normalize(feature)
+prep_recipe_outlier_std <- prep(recipe_outlier_std, training = outlier_data)
+standardized_outlier_data <- bake(prep_recipe_outlier_std, new_data = outlier_data)
+
+# Obtener los parámetros aprendidos
+mean_sd_out <- tidy(prep_recipe_outlier_std, number = 1)
+
+# Extraer los valores específicos del tibble
+mean_out <- mean_sd_out %>% filter(statistic == "mean") %>% pull(value)
+sd_out   <- mean_sd_out %>% filter(statistic == "sd") %>% pull(value)
+
+cat(
+  "Media aprendida (datos originales): ", mean_orig,
+  "\nDesviación estándar aprendida (datos originales): ", sd_orig,
+  "\nDatos originales estandarizados: [", paste(round(standardized_orig_data, 3), collapse = " "), "]",
+  "\nMedia aprendida (datos con valor atípico): ", mean_out,
+  "\nDesviación estándar aprendida (datos con valor atípico): ", sd_out,
+  "\nDatos con valor atípico estandarizados: [", paste(round(standardized_outlier_data, 3), collapse = " "), "]"
+
+)
+```
+
+:::
+
+**Análisis**:
+
+El valor atípico `500.0` incrementó drásticamente tanto la media como la desviación estándar. Debido a que la nueva desviación estándar es tan grande, los valores transformados de los puntos originales `([10, 20, 30, 40])` ahora están todos agrupados muy cerca entre sí. La técnica ha reducido efectivamente su varianza, tratándolos como si fueran casi el mismo valor.
+
+### Sensibilidad de la Normalización (Min-Max)
+
+El escalado Min-Max se define por los valores mínimos y máximos absolutos en los datos, lo que lo hace **altamente sensible** a los valores atípicos.
+
+::: {.panel-tabset}
+### Python
+```{python}
+#| label: py-minmax-outlier
+from sklearn.preprocessing import MinMaxScaler
+import numpy as np
+
+# Escalar los datos originales
+scaler_minmax = MinMaxScaler()
+normalized_orig_data = scaler_minmax.fit_transform(original_data)
+
+# Escalar los datos con valor atípico
+scaler_minmax_outlier = MinMaxScaler()
+normalized_outlier_data = scaler_minmax_outlier.fit_transform(outlier_data)
+
+print("Datos originales normalizados: ", normalized_orig_data.T,
+      "\nDatos con valor atípico normalizados: ", np.round(normalized_outlier_data.T, 3))
+```
+
+### R
+```{r}
+#| label: r-minmax-outlier
+library(tidymodels)
+
+# Receta para los datos originales 
+recipe_orig_mm <- recipe(~ feature, data = original_data) %>% step_range(feature)
+normalized_orig_data <- prep(recipe_orig_mm) %>% bake(new_data = NULL)
+
+# Receta para los datos con valor atípico 
+recipe_outlier_mm <- recipe(~ feature, data = outlier_data) %>% step_range(feature)
+normalized_outlier_data <- prep(recipe_outlier_mm) %>% bake(new_data = NULL)
+
+cat("Datos originales normalizados: [", paste(normalized_orig_data, collapse = " "),
+    "]\nDatos con valor atípico normalizados: [", paste(round(normalized_outlier_data, 3), collapse = " "), "]")
+```
+
+:::
+
+**Análisis**:
+
+Observa cómo el valor atípico `500.0` se convierte en el nuevo máximo (1.0). Como resultado, todos los puntos de datos originales ahora quedan comprimidos en una pequeña parte del rango (de 0 a ~0.06). Las distancias relativas entre estos puntos originales se pierden casi por completo. Este comportamiento puede arruinar el rendimiento de cualquier modelo que dependa de esas distancias.
+
+### Resistencia del Escalado Robusto
+
+RobustScaler utiliza la mediana y el Rango Intercuartílico (IQR), que son estadísticas que no se ven significativamente afectadas por unos pocos valores atípicos extremos. Esto lo hace "robusto".
+
+::: {.panel-tabset}
+### Python
+```{python}
+#| label: py-robust-outlier
+from sklearn.preprocessing import RobustScaler
+
+# Escalar los datos originales
+scaler_robust = RobustScaler()
+scaled_orig_data = scaler_robust.fit_transform(original_data)
+
+# Escalar los datos con valor atípico
+scaler_robust_outlier = RobustScaler()
+scaled_outlier_data = scaler_robust_outlier.fit_transform(outlier_data)
+
+print("Datos originales escalados: ", scaled_orig_data.T,
+      "\nDatos con valor atípico escalados: ", np.round(scaled_outlier_data.T, 3))
+```
+
+### R
+```{r}
+#| label: r-robust-outlier
+library(tidymodels)
+
+# Receta para los datos originales 
+recipe_orig_robust <- recipe(~ feature, data = original_data) %>%
+  step_mutate(feature = (feature - median(feature)) / IQR(feature))
+scaled_orig_data <- prep(recipe_orig_robust) %>% bake(new_data = NULL)
+
+# Receta para los datos con valor atípico 
+recipe_outlier_robust <- recipe(~ feature, data = outlier_data) %>%
+  step_mutate(feature = (feature - median(feature)) / IQR(feature))
+scaled_outlier_data <- prep(recipe_outlier_robust) %>% bake(new_data = NULL)
+
+cat("Datos originales escalados: [", paste(scaled_orig_data, collapse = " "),
+    "]\nDatos con valor atípico escalados: [", paste(round(scaled_outlier_data, 3), collapse = " "), "]")
+```
+
+:::
+
+**Análisis**:
+
+¡Mira esto! ¡Los valores escalados son **idénticos** para los primeros cuatro puntos de datos en ambos escenarios! Como la mediana (30.0) y el Rango Intercuartílico (40.0 - 20.0 = 20) son exactamente los mismos para ambos conjuntos de datos, el escalado de los puntos sin valores atípicos no se ve afectado en absoluto. El valor atípico se transforma en un número grande, pero **no distorsiona el escalado de los demás valores**. Esto preserva el espaciado relativo de los datos originales sin valores atípicos, lo que convierte al escalado robusto en el claro ganador cuando hay valores atípicos.
+
+## Enlaces a la documentación
+
+Para ampliar información y ver los detalles oficiales de las APIs, aquí tienes los enlaces directos de los escaladores y funciones tratados en este post.
+
+### **scikit-learn**
+
+- [**StandardScaler**](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html)  
+  Escala características para que tengan media cero y varianza unitaria.
+- [**MinMaxScaler**](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html)  
+  Escala características a un rango especificado, por defecto [0, 1].
+- [**RobustScaler**](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.RobustScaler.html)  
+  Escala características usando estadísticas robustas a valores atípicos (mediana e IQR).
+
+### **tidymodels / recipes**
+
+- [**step_normalize()**](https://recipes.tidymodels.org/reference/step_normalize.html)  
+  Estandariza datos numéricos a media cero y varianza unitaria.
+- [**step_range()**](https://recipes.tidymodels.org/reference/step_range.html)  
+  Normaliza datos numéricos a un rango especificado.
+- [**step_mutate()**](https://recipes.tidymodels.org/reference/step_mutate.html)  
+  Crea o transforma variables usando expresiones personalizadas.
+
+## ¿Qué sigue?
+
+En este post hemos visto tres de las técnicas de escalado más comunes y hemos explorado su comportamiento sobre la misma característica, incluyendo cómo responde cada una ante valores atípicos.
+
+En la **Parte 3** de la serie *Feature Scaling*, profundizaremos en transformadores menos comunes pero muy efectivos: **MaxAbsScaler**, **PowerTransformer** y **QuantileTransformer**, con un breve vistazo a **Normalizer**, que persigue un propósito muy diferente pero suele mencionarse junto a los escaladores.
